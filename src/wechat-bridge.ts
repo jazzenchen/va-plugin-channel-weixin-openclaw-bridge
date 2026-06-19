@@ -13,6 +13,7 @@ import { getMimeFromFilename } from "./media/mime.js";
 import { downloadMediaItem } from "./media/media-download.js";
 import type { DownloadedMedia } from "./media/media-download.js";
 import { startWeixinLoginWithQr, waitForWeixinLogin } from "./auth/login-qr.js";
+import { extractErrorMessage } from "@vibearound/plugin-channel-sdk";
 import type { Agent, ContentBlock } from "@vibearound/plugin-channel-sdk";
 import type {
   LoginQrStartParams,
@@ -327,7 +328,7 @@ export class WechatOpenClawBridge {
       this.log("info", `prompt done peer=${fromUserId} stopReason=${response.stopReason}`);
       this.streamHandler?.onTurnEnd(chatId);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = extractErrorMessage(error);
       this.log("error", `prompt failed peer=${fromUserId}: ${msg}`);
       this.streamHandler?.onTurnError(chatId, msg);
     } finally {
