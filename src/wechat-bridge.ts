@@ -35,6 +35,7 @@ interface BridgeState {
 }
 
 const DEFAULT_LONG_POLL_TIMEOUT_MS = 35_000;
+const HEALTHY_POLL_WINDOW_MS = 75_000;
 const DEFAULT_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 const MEDIA_OUTBOUND_TEMP_DIR = path.join(os.tmpdir(), "vibearound", "weixin", "media", "outbound-temp");
 
@@ -54,6 +55,7 @@ export class WechatOpenClawBridge {
   };
   private polling = false;
   private stopped = false;
+  private lastSuccessfulPollAt = 0;
   private typingTicketByPeer = new Map<string, string>();
 
   constructor(
@@ -87,12 +89,20 @@ export class WechatOpenClawBridge {
     if (this.polling || !this.config.bot_token) return;
     this.polling = true;
     this.stopped = false;
+    this.lastSuccessfulPollAt = Date.now();
     void this.pollLoop();
   }
 
   stop(): void {
     this.stopped = true;
     this.polling = false;
+  }
+
+  isHealthy(): boolean {
+    return this.polling
+      && !this.stopped
+      && Boolean(this.config.bot_token)
+      && Date.now() - this.lastSuccessfulPollAt <= HEALTHY_POLL_WINDOW_MS;
   }
 
   async loginQrStart(params: LoginQrStartParams): Promise<Record<string, unknown>> {
@@ -255,6 +265,7 @@ export class WechatOpenClawBridge {
           await this.sleep(2000);
           continue;
         }
+        this.lastSuccessfulPollAt = Date.now();
 
         for (const message of response.msgs ?? []) {
           this.handleInboundMessage(message);

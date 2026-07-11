@@ -36,4 +36,5 @@ runChannelPlugin({
   },
   createRenderer: (bridge, log, verbose) =>
     new AgentStreamHandler(bridge, log, verbose),
+  healthCheck: async (bridge) => bridge.isHealthy(),
 });
