@@ -89,7 +89,7 @@ export class WechatOpenClawBridge {
     if (this.polling || !this.config.bot_token) return;
     this.polling = true;
     this.stopped = false;
-    this.lastSuccessfulPollAt = Date.now();
+    this.lastSuccessfulPollAt = 0;
     void this.pollLoop();
   }
 
