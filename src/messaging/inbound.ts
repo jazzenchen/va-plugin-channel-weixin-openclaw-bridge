@@ -55,6 +55,9 @@ export function extractInboundText(message: WeixinMessage): string {
 
 export function shouldHandleInboundMessage(message: WeixinMessage): boolean {
   if (!message.from_user_id) return false;
+  // Group routing and current-bot mention semantics are not productized for
+  // this bridge yet. Never reinterpret a group message as a direct message.
+  if (message.group_id != null) return false;
   if (message.message_type != null && message.message_type !== MessageType.USER) {
     logger.debug(
       `skip inbound message_id=${String(message.message_id ?? "")} message_type=${String(message.message_type)}`,
