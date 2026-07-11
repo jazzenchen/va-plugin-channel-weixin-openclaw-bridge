@@ -8,6 +8,7 @@
 import {
   BlockRenderer,
   type BlockKind,
+  type ChannelTarget,
   type VerboseConfig,
 } from "@vibearound/plugin-channel-sdk";
 import type { WechatOpenClawBridge } from "./wechat-bridge.js";
@@ -28,13 +29,21 @@ export class AgentStreamHandler extends BlockRenderer<string> {
     this.log = log;
   }
 
-  protected async sendText(chatId: string, text: string): Promise<void> {
-    await this.bridge.sendSystemText({ chatId, text });
+  protected async sendText(target: ChannelTarget, text: string): Promise<void> {
+    await this.bridge.sendSystemText({
+      chatId: target.chatId,
+      text,
+      replyTo: target.replyTo,
+    });
   }
 
-  protected async sendBlock(chatId: string, _kind: BlockKind, content: string): Promise<string | null> {
+  protected async sendBlock(target: ChannelTarget, _kind: BlockKind, content: string): Promise<string | null> {
     try {
-      await this.bridge.sendSystemText({ chatId, text: content });
+      await this.bridge.sendSystemText({
+        chatId: target.chatId,
+        text: content,
+        replyTo: target.replyTo,
+      });
     } catch (e) {
       this.log("error", `sendBlock failed: ${e}`);
     }

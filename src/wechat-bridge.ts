@@ -15,6 +15,7 @@ import type { DownloadedMedia } from "./media/media-download.js";
 import { startWeixinLoginWithQr, waitForWeixinLogin } from "./auth/login-qr.js";
 import {
   cancelChannelPrompt,
+  channelTargetFromInboundContext,
   extractErrorMessage,
   isChannelStopCommand,
   sendChannelPrompt,
@@ -285,6 +286,7 @@ export class WechatOpenClawBridge {
       scope: "dm",
       addressedBy: "dm",
     } satisfies ChannelInboundContext;
+    const target = channelTargetFromInboundContext(inboundContext);
     if (text && isChannelStopCommand(text)) {
       await cancelChannelPrompt(this.agent, { context: inboundContext });
       return;
@@ -337,12 +339,12 @@ export class WechatOpenClawBridge {
     if (contentBlocks.length === 0) return;
 
     const chatId = fromUserId;
-    if (text && this.streamHandler?.consumePendingText(chatId, text)) {
+    if (text && this.streamHandler?.consumePendingText(target, text)) {
       return;
     }
 
     // Notify stream handler and start typing BEFORE prompt
-    this.streamHandler?.onPromptSent(chatId);
+    this.streamHandler?.onPromptSent(target);
     await this.startTyping(chatId).catch((e) => {
       this.log("warn", `start typing failed: ${e}`);
     });
@@ -355,13 +357,16 @@ export class WechatOpenClawBridge {
         context: inboundContext,
         prompt: contentBlocks,
       });
-      if (!response) return;
+      if (!response) {
+        await this.streamHandler?.onTurnEnd(target);
+        return;
+      }
       this.log("info", `prompt done peer=${fromUserId} stopReason=${response.stopReason}`);
-      this.streamHandler?.onTurnEnd(chatId);
+      await this.streamHandler?.onTurnEnd(target);
     } catch (error: unknown) {
       const msg = extractErrorMessage(error);
       this.log("error", `prompt failed peer=${fromUserId}: ${msg}`);
-      this.streamHandler?.onTurnError(chatId, msg);
+      await this.streamHandler?.onTurnError(target, msg);
     } finally {
       await this.stopTyping(chatId).catch((e) => {
         this.log("warn", `stop typing failed: ${e}`);
