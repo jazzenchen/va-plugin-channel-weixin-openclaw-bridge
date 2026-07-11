@@ -19,9 +19,16 @@ import type { WechatOpenClawBridgeConfig } from "./protocol.js";
 runChannelPlugin({
   name: "vibearound-weixin-openclaw-bridge",
   version: "0.1.0",
-  createBot: ({ config, agent, log, cacheDir }) => {
+  createBot: ({ config, agent, log, cacheDir, channelInstanceId, actorId }) => {
     const bridgeConfig = config as unknown as WechatOpenClawBridgeConfig;
-    return new WechatOpenClawBridge(bridgeConfig, agent, log, cacheDir);
+    return new WechatOpenClawBridge(
+      bridgeConfig,
+      agent,
+      log,
+      cacheDir,
+      channelInstanceId,
+      actorId,
+    );
   },
   afterCreate: async (bridge, log) => {
     const botInfo = await bridge.probe();

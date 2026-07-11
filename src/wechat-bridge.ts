@@ -13,8 +13,13 @@ import { getMimeFromFilename } from "./media/mime.js";
 import { downloadMediaItem } from "./media/media-download.js";
 import type { DownloadedMedia } from "./media/media-download.js";
 import { startWeixinLoginWithQr, waitForWeixinLogin } from "./auth/login-qr.js";
-import { extractErrorMessage } from "@vibearound/plugin-channel-sdk";
-import type { Agent, ContentBlock } from "@vibearound/plugin-channel-sdk";
+import {
+  cancelChannelPrompt,
+  extractErrorMessage,
+  isChannelStopCommand,
+  sendChannelPrompt,
+} from "@vibearound/plugin-channel-sdk";
+import type { Agent, ChannelInboundContext, ContentBlock } from "@vibearound/plugin-channel-sdk";
 import type {
   LoginQrStartParams,
   LoginQrWaitParams,
@@ -39,6 +44,8 @@ export class WechatOpenClawBridge {
   private agent: Agent;
   private log: LogFn;
   private cacheDir: string;
+  private channelInstanceId: string;
+  private actorId: string;
   private streamHandler: import("./agent-stream.js").AgentStreamHandler | null = null;
   private state: BridgeState = {
     getUpdatesBuf: "",
@@ -48,11 +55,20 @@ export class WechatOpenClawBridge {
   private stopped = false;
   private typingTicketByPeer = new Map<string, string>();
 
-  constructor(config: WechatOpenClawBridgeConfig, agent: Agent, log: LogFn, cacheDir: string) {
+  constructor(
+    config: WechatOpenClawBridgeConfig,
+    agent: Agent,
+    log: LogFn,
+    cacheDir: string,
+    channelInstanceId: string,
+    actorId: string,
+  ) {
     this.config = config;
     this.agent = agent;
     this.log = log;
     this.cacheDir = cacheDir;
+    this.channelInstanceId = channelInstanceId;
+    this.actorId = actorId;
   }
 
   setStreamHandler(handler: import("./agent-stream.js").AgentStreamHandler): void {
@@ -259,8 +275,22 @@ export class WechatOpenClawBridge {
       setContextToken(this.config.account_id || "default", fromUserId, message.context_token);
     }
 
-    // Download media items (image, file, video)
     const messageId = String(message.message_id ?? Date.now());
+    const inboundContext = {
+      channelInstanceId: this.channelInstanceId,
+      actorId: this.actorId,
+      chatId: fromUserId,
+      senderId: fromUserId,
+      platformMessageId: messageId,
+      scope: "dm",
+      addressedBy: "dm",
+    } satisfies ChannelInboundContext;
+    if (text && isChannelStopCommand(text)) {
+      await cancelChannelPrompt(this.agent, { context: inboundContext });
+      return;
+    }
+
+    // Download media items (image, file, video)
     const downloadedMedia: DownloadedMedia[] = [];
     for (const item of message.item_list ?? []) {
       if (!isMediaItem(item)) continue;
@@ -321,10 +351,11 @@ export class WechatOpenClawBridge {
     // Session notifications stream in during the call.
     this.log("debug", `prompt peer=${fromUserId} blocks=${contentBlocks.length} text=${(text ?? "").slice(0, 80)}`);
     try {
-      const response = await this.agent.prompt({
-        sessionId: fromUserId,
+      const response = await sendChannelPrompt(this.agent, {
+        context: inboundContext,
         prompt: contentBlocks,
       });
+      if (!response) return;
       this.log("info", `prompt done peer=${fromUserId} stopReason=${response.stopReason}`);
       this.streamHandler?.onTurnEnd(chatId);
     } catch (error: unknown) {
