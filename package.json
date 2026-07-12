@@ -1,6 +1,6 @@
 {
   "name": "@vibearound/plugin-channel-weixin-openclaw-bridge",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "type": "module",
   "description": "VibeAround WeChat OpenClaw bridge plugin (stdio JSON-RPC)",
