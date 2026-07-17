@@ -10,6 +10,7 @@ import { logger } from "../util/logger.js";
 import { getExtensionFromContentTypeOrUrl } from "../media/mime.js";
 import { tempFileName } from "../util/random.js";
 import { UploadMediaType } from "../api/types.js";
+import { readBoundedResponse } from "../bounded-response.js";
 
 export type UploadedFileInfo = {
   filekey: string;
@@ -20,13 +21,13 @@ export type UploadedFileInfo = {
 };
 
 export async function downloadRemoteImageToTemp(url: string, destDir: string): Promise<string> {
-  logger.debug(`downloadRemoteImageToTemp: fetching url=${url}`);
+  logger.debug("downloadRemoteImageToTemp: fetching remote media");
   const res = await fetch(url);
   if (!res.ok) {
-    const msg = `remote media download failed: ${res.status} ${res.statusText} url=${url}`;
+    const msg = `remote media download failed: ${res.status} ${res.statusText}`;
     throw new Error(msg);
   }
-  const buf = Buffer.from(await res.arrayBuffer());
+  const buf = await readBoundedResponse(res);
   await fs.mkdir(destDir, { recursive: true });
   const ext = getExtensionFromContentTypeOrUrl(res.headers.get("content-type"), url);
   const name = tempFileName("weixin-remote", ext);

@@ -13,7 +13,14 @@ import { getMimeFromFilename } from "./media/mime.js";
 import { downloadMediaItem } from "./media/media-download.js";
 import type { DownloadedMedia } from "./media/media-download.js";
 import { startWeixinLoginWithQr, waitForWeixinLogin } from "./auth/login-qr.js";
-import type { Agent, ContentBlock } from "@vibearound/plugin-channel-sdk";
+import {
+  cancelChannelPrompt,
+  channelTargetFromInboundContext,
+  extractErrorMessage,
+  isChannelStopCommand,
+  sendChannelPrompt,
+} from "@vibearound/plugin-channel-sdk";
+import type { Agent, ChannelInboundContext, ContentBlock } from "@vibearound/plugin-channel-sdk";
 import type {
   LoginQrStartParams,
   LoginQrWaitParams,
@@ -28,6 +35,7 @@ interface BridgeState {
 }
 
 const DEFAULT_LONG_POLL_TIMEOUT_MS = 35_000;
+const HEALTHY_POLL_WINDOW_MS = 75_000;
 const DEFAULT_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 const MEDIA_OUTBOUND_TEMP_DIR = path.join(os.tmpdir(), "vibearound", "weixin", "media", "outbound-temp");
 
@@ -38,6 +46,8 @@ export class WechatOpenClawBridge {
   private agent: Agent;
   private log: LogFn;
   private cacheDir: string;
+  private channelInstanceId: string;
+  private actorId: string;
   private streamHandler: import("./agent-stream.js").AgentStreamHandler | null = null;
   private state: BridgeState = {
     getUpdatesBuf: "",
@@ -45,13 +55,23 @@ export class WechatOpenClawBridge {
   };
   private polling = false;
   private stopped = false;
+  private lastSuccessfulPollAt = 0;
   private typingTicketByPeer = new Map<string, string>();
 
-  constructor(config: WechatOpenClawBridgeConfig, agent: Agent, log: LogFn, cacheDir: string) {
+  constructor(
+    config: WechatOpenClawBridgeConfig,
+    agent: Agent,
+    log: LogFn,
+    cacheDir: string,
+    channelInstanceId: string,
+    actorId: string,
+  ) {
     this.config = config;
     this.agent = agent;
     this.log = log;
     this.cacheDir = cacheDir;
+    this.channelInstanceId = channelInstanceId;
+    this.actorId = actorId;
   }
 
   setStreamHandler(handler: import("./agent-stream.js").AgentStreamHandler): void {
@@ -69,12 +89,20 @@ export class WechatOpenClawBridge {
     if (this.polling || !this.config.bot_token) return;
     this.polling = true;
     this.stopped = false;
+    this.lastSuccessfulPollAt = 0;
     void this.pollLoop();
   }
 
   stop(): void {
     this.stopped = true;
     this.polling = false;
+  }
+
+  isHealthy(): boolean {
+    return this.polling
+      && !this.stopped
+      && Boolean(this.config.bot_token)
+      && Date.now() - this.lastSuccessfulPollAt <= HEALTHY_POLL_WINDOW_MS;
   }
 
   async loginQrStart(params: LoginQrStartParams): Promise<Record<string, unknown>> {
@@ -234,19 +262,15 @@ export class WechatOpenClawBridge {
         }
 
         if ((response.ret && response.ret !== 0) || (response.errcode && response.errcode !== 0)) {
-          this.log(
-            "warn",
-            `getUpdates returned ret=${response.ret} errcode=${response.errcode} errmsg=${response.errmsg ?? ""}`,
-          );
           await this.sleep(2000);
           continue;
         }
+        this.lastSuccessfulPollAt = Date.now();
 
         for (const message of response.msgs ?? []) {
           this.handleInboundMessage(message);
         }
       } catch (error) {
-        this.log("error", `getUpdates failed: ${error instanceof Error ? error.message : String(error)}`);
         await this.sleep(2000);
       }
     }
@@ -263,8 +287,23 @@ export class WechatOpenClawBridge {
       setContextToken(this.config.account_id || "default", fromUserId, message.context_token);
     }
 
-    // Download media items (image, file, video)
     const messageId = String(message.message_id ?? Date.now());
+    const inboundContext = {
+      channelInstanceId: this.channelInstanceId,
+      actorId: this.actorId,
+      chatId: fromUserId,
+      senderId: fromUserId,
+      platformMessageId: messageId,
+      scope: "dm",
+      addressedBy: "dm",
+    } satisfies ChannelInboundContext;
+    const target = channelTargetFromInboundContext(inboundContext);
+    if (text && isChannelStopCommand(text)) {
+      await cancelChannelPrompt(this.agent, { context: inboundContext });
+      return;
+    }
+
+    // Download media items (image, file, video)
     const downloadedMedia: DownloadedMedia[] = [];
     for (const item of message.item_list ?? []) {
       if (!isMediaItem(item)) continue;
@@ -311,12 +350,12 @@ export class WechatOpenClawBridge {
     if (contentBlocks.length === 0) return;
 
     const chatId = fromUserId;
-    if (text && this.streamHandler?.consumePendingText(chatId, text)) {
+    if (text && this.streamHandler?.consumePendingText(target, text)) {
       return;
     }
 
     // Notify stream handler and start typing BEFORE prompt
-    this.streamHandler?.onPromptSent(chatId);
+    this.streamHandler?.onPromptSent(target);
     await this.startTyping(chatId).catch((e) => {
       this.log("warn", `start typing failed: ${e}`);
     });
@@ -325,16 +364,20 @@ export class WechatOpenClawBridge {
     // Session notifications stream in during the call.
     this.log("debug", `prompt peer=${fromUserId} blocks=${contentBlocks.length} text=${(text ?? "").slice(0, 80)}`);
     try {
-      const response = await this.agent.prompt({
-        sessionId: fromUserId,
+      const response = await sendChannelPrompt(this.agent, {
+        context: inboundContext,
         prompt: contentBlocks,
       });
+      if (!response) {
+        await this.streamHandler?.onTurnEnd(target);
+        return;
+      }
       this.log("info", `prompt done peer=${fromUserId} stopReason=${response.stopReason}`);
-      this.streamHandler?.onTurnEnd(chatId);
+      await this.streamHandler?.onTurnEnd(target);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = extractErrorMessage(error);
       this.log("error", `prompt failed peer=${fromUserId}: ${msg}`);
-      this.streamHandler?.onTurnError(chatId, msg);
+      await this.streamHandler?.onTurnError(target, msg);
     } finally {
       await this.stopTyping(chatId).catch((e) => {
         this.log("warn", `stop typing failed: ${e}`);

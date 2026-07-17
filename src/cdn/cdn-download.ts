@@ -5,6 +5,7 @@
 
 import { decryptAesEcb } from "./aes-ecb.js";
 import { logger } from "../util/logger.js";
+import { readBoundedResponse } from "../bounded-response.js";
 
 const DEFAULT_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 const DOWNLOAD_MAX_RETRIES = 3;
@@ -51,7 +52,7 @@ async function fetchCdnBytes(url: string, label: string): Promise<Buffer> {
       if (!res.ok) {
         throw new Error(`${label}: CDN download ${res.status} ${res.statusText}`);
       }
-      return Buffer.from(await res.arrayBuffer());
+      return await readBoundedResponse(res);
     } catch (err) {
       lastError = err;
       if (err instanceof Error && err.message.includes("client error")) throw err;
@@ -77,7 +78,7 @@ export async function downloadAndDecryptBuffer(
 ): Promise<Buffer> {
   const key = parseAesKey(aesKeyBase64, label);
   const url = fullUrl ?? buildCdnDownloadUrl(encryptedQueryParam, cdnBaseUrl);
-  logger.debug(`${label}: fetching url=${url.slice(0, 80)}...`);
+  logger.debug(`${label}: fetching media`);
   const encrypted = await fetchCdnBytes(url, label);
   logger.debug(`${label}: downloaded ${encrypted.byteLength} bytes, decrypting`);
   const decrypted = decryptAesEcb(encrypted, key);
@@ -95,6 +96,6 @@ export async function downloadPlainCdnBuffer(
   fullUrl?: string,
 ): Promise<Buffer> {
   const url = fullUrl ?? buildCdnDownloadUrl(encryptedQueryParam, cdnBaseUrl);
-  logger.debug(`${label}: fetching url=${url.slice(0, 80)}...`);
+  logger.debug(`${label}: fetching media`);
   return fetchCdnBytes(url, label);
 }
