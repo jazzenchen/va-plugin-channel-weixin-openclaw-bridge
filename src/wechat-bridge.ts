@@ -308,7 +308,7 @@ export class WechatOpenClawBridge {
 
     // Download media items (image, file, video)
     const downloadedMedia: DownloadedMedia[] = [];
-    for (const item of message.item_list ?? []) {
+    for (const [itemIndex, item] of (message.item_list ?? []).entries()) {
       if (!isMediaItem(item)) continue;
       const media = await downloadMediaItem({
         item,
@@ -316,7 +316,8 @@ export class WechatOpenClawBridge {
         cacheDir: this.cacheDir,
         channelKind: "weixin-openclaw-bridge",
         chatId: fromUserId,
-        messageId: item.msg_id ?? messageId,
+        messageId,
+        itemIndex,
         label: `inbound[${fromUserId}]`,
       });
       if (media) downloadedMedia.push(media);
