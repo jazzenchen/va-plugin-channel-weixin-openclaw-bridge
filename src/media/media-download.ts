@@ -3,6 +3,8 @@
  * Based on @tencent-weixin/openclaw-weixin (MIT).
  */
 
+import path from "node:path";
+
 import type { MessageItem } from "../api/types.js";
 import { MessageItemType } from "../api/types.js";
 import { downloadAndDecryptBuffer, downloadPlainCdnBuffer } from "../cdn/cdn-download.js";
@@ -82,7 +84,7 @@ export async function downloadMediaItem(params: {
       return null;
     const fileName = fileItem.file_name ?? "file.bin";
     const mime = getMimeFromFilename(fileName);
-    const ext = fileName.includes(".") ? `.${fileName.split(".").pop()}` : ".bin";
+    const ext = path.extname(path.posix.basename(fileName.replaceAll("\\", "/"))) || ".bin";
     const cachePath = buildCachePath({ cacheDir, channelKind, chatId, messageId, ext });
     if (await isCached(cachePath)) {
       logger.debug(`${label} file: cache hit ${cachePath}`);
