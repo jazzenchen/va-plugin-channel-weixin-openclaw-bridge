@@ -268,7 +268,9 @@ export class WechatOpenClawBridge {
         this.lastSuccessfulPollAt = Date.now();
 
         for (const message of response.msgs ?? []) {
-          this.handleInboundMessage(message);
+          void this.handleInboundMessage(message).catch((error: unknown) => {
+            this.log("error", `inbound message failed: ${extractErrorMessage(error)}`);
+          });
         }
       } catch (error) {
         await this.sleep(2000);

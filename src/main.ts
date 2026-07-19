@@ -34,7 +34,7 @@ runChannelPlugin({
     const botInfo = await bridge.probe();
     log("info", `bot probed: ${JSON.stringify(botInfo)}`);
   },
-  createRenderer: (bridge, log, verbose) =>
-    new AgentStreamHandler(bridge, log, verbose),
+  createRenderer: (bridge, _log, verbose) =>
+    new AgentStreamHandler(bridge, verbose),
   healthCheck: async (bridge) => bridge.isHealthy(),
 });
