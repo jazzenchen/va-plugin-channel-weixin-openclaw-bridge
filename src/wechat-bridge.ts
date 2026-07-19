@@ -1,5 +1,6 @@
 import path from "node:path";
 import os from "node:os";
+import { pathToFileURL } from "node:url";
 
 import { getConfig, getUpdates, sendTyping } from "./api/api.js";
 import type { WeixinApiOptions } from "./api/api.js";
@@ -343,7 +344,7 @@ export class WechatOpenClawBridge {
     for (const media of downloadedMedia) {
       contentBlocks.push({
         type: "resource_link",
-        uri: `file://${media.path}`,
+        uri: pathToFileURL(media.path).href,
         name: media.fileName ?? path.basename(media.path),
         mimeType: media.mimeType,
       });
