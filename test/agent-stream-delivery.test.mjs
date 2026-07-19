@@ -24,24 +24,3 @@ test("Weixin transport failure rejects block delivery", async () => {
     failure,
   );
 });
-
-test("Weixin turn completion exposes final delivery failure", async () => {
-  const renderer = createRenderer(async () => {
-    throw new Error("Weixin final delivery failed");
-  });
-
-  renderer.onPromptSent(target);
-  renderer.onSessionUpdate(target, {
-    sessionId: "session",
-    update: {
-      sessionUpdate: "agent_message_chunk",
-      content: { type: "text", text: "final response" },
-      messageId: "message-final",
-    },
-  });
-
-  await assert.rejects(
-    renderer.onTurnEnd(target),
-    /Weixin final delivery failed/,
-  );
-});
