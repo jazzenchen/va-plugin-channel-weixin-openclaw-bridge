@@ -364,7 +364,7 @@ export class WechatOpenClawBridge {
 
     // Send as ACP prompt — blocks until turn completes, returns real StopReason.
     // Session notifications stream in during the call.
-    this.log("debug", `prompt peer=${fromUserId} blocks=${contentBlocks.length} text=${(text ?? "").slice(0, 80)}`);
+    this.log("debug", `prompt peer=${fromUserId} blocks=${contentBlocks.length}`);
     try {
       const response = await sendChannelPrompt(this.agent, {
         context: inboundContext,
