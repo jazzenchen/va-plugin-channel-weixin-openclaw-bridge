@@ -3,6 +3,8 @@
  * Based on @tencent-weixin/openclaw-weixin (MIT).
  */
 
+import path from "node:path";
+
 import type { MessageItem } from "../api/types.js";
 import { MessageItemType } from "../api/types.js";
 import { downloadAndDecryptBuffer, downloadPlainCdnBuffer } from "../cdn/cdn-download.js";
@@ -30,9 +32,11 @@ export async function downloadMediaItem(params: {
   channelKind: string;
   chatId: string;
   messageId: string;
+  itemIndex: number;
   label: string;
 }): Promise<DownloadedMedia | null> {
-  const { item, cdnBaseUrl, cacheDir, channelKind, chatId, messageId, label } = params;
+  const { item, cdnBaseUrl, cacheDir, channelKind, chatId, messageId, itemIndex, label } = params;
+  const cacheMessageId = item.msg_id ?? `${messageId}-${itemIndex}`;
 
   if (item.type === MessageItemType.IMAGE) {
     const img = item.image_item;
@@ -42,7 +46,13 @@ export async function downloadMediaItem(params: {
       ? Buffer.from(img!.aeskey, "hex").toString("base64")
       : media.aes_key;
 
-    const cachePath = buildCachePath({ cacheDir, channelKind, chatId, messageId, ext: ".jpg" });
+    const cachePath = buildCachePath({
+      cacheDir,
+      channelKind,
+      chatId,
+      messageId: cacheMessageId,
+      ext: ".jpg",
+    });
     if (await isCached(cachePath)) {
       logger.debug(`${label} image: cache hit ${cachePath}`);
       return { type: "image", path: cachePath, mimeType: "image/jpeg" };
@@ -82,8 +92,14 @@ export async function downloadMediaItem(params: {
       return null;
     const fileName = fileItem.file_name ?? "file.bin";
     const mime = getMimeFromFilename(fileName);
-    const ext = fileName.includes(".") ? `.${fileName.split(".").pop()}` : ".bin";
-    const cachePath = buildCachePath({ cacheDir, channelKind, chatId, messageId, ext });
+    const ext = path.extname(path.posix.basename(fileName.replaceAll("\\", "/"))) || ".bin";
+    const cachePath = buildCachePath({
+      cacheDir,
+      channelKind,
+      chatId,
+      messageId: cacheMessageId,
+      ext,
+    });
     if (await isCached(cachePath)) {
       logger.debug(`${label} file: cache hit ${cachePath}`);
       return { type: "file", path: cachePath, mimeType: mime, fileName };
@@ -114,7 +130,13 @@ export async function downloadMediaItem(params: {
     const videoItem = item.video_item;
     if ((!videoItem?.media?.encrypt_query_param && !(videoItem?.media as any)?.full_url) || !videoItem?.media?.aes_key)
       return null;
-    const cachePath = buildCachePath({ cacheDir, channelKind, chatId, messageId, ext: ".mp4" });
+    const cachePath = buildCachePath({
+      cacheDir,
+      channelKind,
+      chatId,
+      messageId: cacheMessageId,
+      ext: ".mp4",
+    });
     if (await isCached(cachePath)) {
       logger.debug(`${label} video: cache hit ${cachePath}`);
       return { type: "video", path: cachePath, mimeType: "video/mp4" };

@@ -1,5 +1,6 @@
 import path from "node:path";
 import os from "node:os";
+import { pathToFileURL } from "node:url";
 
 import { getConfig, getUpdates, sendTyping } from "./api/api.js";
 import type { WeixinApiOptions } from "./api/api.js";
@@ -268,7 +269,9 @@ export class WechatOpenClawBridge {
         this.lastSuccessfulPollAt = Date.now();
 
         for (const message of response.msgs ?? []) {
-          this.handleInboundMessage(message);
+          void this.handleInboundMessage(message).catch((error: unknown) => {
+            this.log("error", `inbound message failed: ${extractErrorMessage(error)}`);
+          });
         }
       } catch (error) {
         await this.sleep(2000);
@@ -305,7 +308,7 @@ export class WechatOpenClawBridge {
 
     // Download media items (image, file, video)
     const downloadedMedia: DownloadedMedia[] = [];
-    for (const item of message.item_list ?? []) {
+    for (const [itemIndex, item] of (message.item_list ?? []).entries()) {
       if (!isMediaItem(item)) continue;
       const media = await downloadMediaItem({
         item,
@@ -313,7 +316,8 @@ export class WechatOpenClawBridge {
         cacheDir: this.cacheDir,
         channelKind: "weixin-openclaw-bridge",
         chatId: fromUserId,
-        messageId: item.msg_id ?? messageId,
+        messageId,
+        itemIndex,
         label: `inbound[${fromUserId}]`,
       });
       if (media) downloadedMedia.push(media);
@@ -341,7 +345,7 @@ export class WechatOpenClawBridge {
     for (const media of downloadedMedia) {
       contentBlocks.push({
         type: "resource_link",
-        uri: `file://${media.path}`,
+        uri: pathToFileURL(media.path).href,
         name: media.fileName ?? path.basename(media.path),
         mimeType: media.mimeType,
       });
@@ -362,7 +366,7 @@ export class WechatOpenClawBridge {
 
     // Send as ACP prompt — blocks until turn completes, returns real StopReason.
     // Session notifications stream in during the call.
-    this.log("debug", `prompt peer=${fromUserId} blocks=${contentBlocks.length} text=${(text ?? "").slice(0, 80)}`);
+    this.log("debug", `prompt peer=${fromUserId} blocks=${contentBlocks.length}`);
     try {
       const response = await sendChannelPrompt(this.agent, {
         context: inboundContext,
