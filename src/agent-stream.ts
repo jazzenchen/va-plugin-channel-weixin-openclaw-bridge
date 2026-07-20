@@ -13,20 +13,16 @@ import {
 } from "@vibearound/plugin-channel-sdk";
 import type { WechatOpenClawBridge } from "./wechat-bridge.js";
 
-type LogFn = (level: string, message: string) => void;
-
 export class AgentStreamHandler extends BlockRenderer<string> {
   private bridge: WechatOpenClawBridge;
-  private log: LogFn;
 
-  constructor(bridge: WechatOpenClawBridge, log: LogFn, verbose?: Partial<VerboseConfig>) {
+  constructor(bridge: WechatOpenClawBridge, verbose?: Partial<VerboseConfig>) {
     super({
       streaming: false,
       flushIntervalMs: 500,
       verbose,
     });
     this.bridge = bridge;
-    this.log = log;
   }
 
   protected async sendText(target: ChannelTarget, text: string): Promise<void> {
@@ -38,15 +34,11 @@ export class AgentStreamHandler extends BlockRenderer<string> {
   }
 
   protected async sendBlock(target: ChannelTarget, _kind: BlockKind, content: string): Promise<string | null> {
-    try {
-      await this.bridge.sendSystemText({
-        chatId: target.chatId,
-        text: content,
-        replyTo: target.replyTo,
-      });
-    } catch (e) {
-      this.log("error", `sendBlock failed: ${e}`);
-    }
+    await this.bridge.sendSystemText({
+      chatId: target.chatId,
+      text: content,
+      replyTo: target.replyTo,
+    });
     return "sent"; // non-null sentinel — prevents duplicate sends
   }
 
