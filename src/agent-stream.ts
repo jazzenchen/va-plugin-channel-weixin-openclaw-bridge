@@ -9,6 +9,7 @@ import {
   BlockRenderer,
   type BlockKind,
   type ChannelTarget,
+  type OutboundFile,
   type VerboseConfig,
 } from "@vibearound/plugin-channel-sdk";
 import type { WechatOpenClawBridge } from "./wechat-bridge.js";
@@ -30,6 +31,17 @@ export class AgentStreamHandler extends BlockRenderer<string> {
       chatId: target.chatId,
       text,
       replyTo: target.replyTo,
+    });
+  }
+
+  protected async sendFile(
+    target: ChannelTarget,
+    file: OutboundFile,
+  ): Promise<void> {
+    await this.bridge.sendMediaFile({
+      chatId: target.chatId,
+      filePath: file.path,
+      fileName: file.name,
     });
   }
 

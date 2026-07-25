@@ -11,8 +11,8 @@ const target = {
   replyTo: "message-1",
 };
 
-function createRenderer(sendSystemText) {
-  return new AgentStreamHandler({ sendSystemText });
+function createRenderer(sendSystemText, sendMediaFile = async () => {}) {
+  return new AgentStreamHandler({ sendSystemText, sendMediaFile });
 }
 
 test("Weixin transport failure rejects block delivery", async () => {
@@ -23,4 +23,20 @@ test("Weixin transport failure rejects block delivery", async () => {
     renderer.sendBlock(target, "text", "answer"),
     failure,
   );
+});
+
+test("Weixin forwards workspace files with their resource name", async () => {
+  const sent = [];
+  const renderer = createRenderer(async () => {}, async (file) => sent.push(file));
+
+  await renderer.sendFile(target, {
+    path: "/workspace/generated.bin",
+    name: "report.pdf",
+  });
+
+  assert.deepEqual(sent, [{
+    chatId: "peer-1",
+    filePath: "/workspace/generated.bin",
+    fileName: "report.pdf",
+  }]);
 });

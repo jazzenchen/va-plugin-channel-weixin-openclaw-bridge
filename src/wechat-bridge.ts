@@ -206,13 +206,14 @@ export class WechatOpenClawBridge {
     return this.prepareMediaFromFile(filePath, to);
   }
 
-  async sendMediaFile(params: { chatId: string; filePath: string; text?: string }): Promise<void> {
+  async sendMediaFile(params: { chatId: string; filePath: string; fileName?: string; text?: string }): Promise<void> {
     if (!this.config.bot_token) {
       throw new Error("bot_token is required before sending WeChat media");
     }
     const to = this.extractPeerId(params.chatId);
     await sendWeixinMediaFile({
       filePath: params.filePath,
+      fileName: params.fileName,
       to,
       text: params.text ?? "",
       opts: {
