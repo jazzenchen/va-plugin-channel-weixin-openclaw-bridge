@@ -8,6 +8,7 @@ import { uploadFileAttachmentToWeixin, uploadFileToWeixin, uploadVideoToWeixin }
 
 export async function sendWeixinMediaFile(params: {
   filePath: string;
+  fileName?: string;
   to: string;
   text: string;
   opts: WeixinApiOptions & { contextToken?: string };
@@ -27,7 +28,7 @@ export async function sendWeixinMediaFile(params: {
     return sendImageMessageWeixin({ to, text, uploaded, opts });
   }
 
-  const fileName = path.basename(filePath);
+  const fileName = params.fileName ?? path.basename(filePath);
   logger.info(`sendWeixinMediaFile: uploading file attachment ${fileName} to=${to}`);
   const uploaded = await uploadFileAttachmentToWeixin({
     filePath,
